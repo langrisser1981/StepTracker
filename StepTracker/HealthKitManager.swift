@@ -8,6 +8,9 @@ class HealthKitManager: ObservableObject {
     // 發布步數變數
     @Published var stepCount: Int = 0
 
+    // 更新資料結構以儲存每日步數
+    @Published var weeklyStepCount: [(date: Date, steps: Int)] = []
+
     // 檢查是否可以使用 HealthKit
     func requestAuthorization() {
         // 確認裝置是否支援 HealthKit
@@ -56,5 +59,51 @@ class HealthKitManager: ObservableObject {
         }
 
         healthStore.execute(query)
+    }
+
+    // 取得最近七天的步數
+    func fetchWeeklySteps() {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+
+        let calendar = Calendar.current
+        let endDate = Date()
+        guard let startDate = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: endDate)) else { return }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+
+        let interval = DateComponents(day: 1)
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: startDate,
+            intervalComponents: interval
+        )
+
+        query.initialResultsHandler = { [weak self] _, results, error in
+            guard let results = results else {
+                print("無法取得步數資料：\(String(describing: error))")
+                return
+            }
+
+            var stepData: [(date: Date, steps: Int)] = []
+
+            results.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                let count = statistics.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0
+                stepData.append((date: statistics.startDate, steps: Int(count)))
+            }
+
+            DispatchQueue.main.async {
+                self?.weeklyStepCount = stepData
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
+    // 更新資料的函數
+    func refreshData() {
+        fetchWeeklySteps()
     }
 }
