@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSHealthShareUsageDescription</key>
+    <string>我們需要存取您的健康資料以顯示每日步數</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>我們需要存取您的健康資料以更新您的步數資訊</string>
+</dict>
+</plist>
