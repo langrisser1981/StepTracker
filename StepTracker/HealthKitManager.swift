@@ -20,18 +20,15 @@ class HealthKitManager: ObservableObject {
         }
 
         // 設定要讀取的資料類型
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            print("無法取得步數資料類型")
-            return
-        }
+        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
 
         // 請求權限
-        healthStore.requestAuthorization(toShare: [], read: [stepType]) { success, error in
+        healthStore.requestAuthorization(toShare: nil, read: [stepType, distanceType]) { success, error in
             if success {
-                print("成功取得健康資料存取權限")
-                self.fetchTodaySteps()
+                print("HealthKit 權限獲取成功")
             } else {
-                print("無法取得健康資料存取權限：\(String(describing: error))")
+                print("HealthKit 權限獲取失敗：\(error?.localizedDescription ?? "未知錯誤")")
             }
         }
     }
@@ -102,8 +99,63 @@ class HealthKitManager: ObservableObject {
         healthStore.execute(query)
     }
 
+    func fetchStepsAndDistance() {
+        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+
+        let calendar = Calendar.current
+        let now = Date()
+        // 設定開始時間（7 天前）
+        guard let startDate = calendar.date(byAdding: .day, value: -7, to: now) else { return }
+
+        let interval = DateComponents(minute: 1) // 設定時間間隔為每分鐘
+
+        // 建立查詢函數
+        func createQuery(for type: HKQuantityType, completion: @escaping ([Date: Double]) -> Void) {
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: nil,
+                options: .cumulativeSum,
+                anchorDate: now,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, error in
+                if let error = error {
+                    print("查詢 \(type.identifier) 失敗: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let results = results else { return }
+                var data: [Date: Double] = [:]
+
+                results.enumerateStatistics(from: startDate, to: now) { statistics, _ in
+                    if let sum = statistics.sumQuantity() {
+                        let value = sum.doubleValue(for: type == stepType ? HKUnit.count() : HKUnit.meter())
+                        data[statistics.startDate] = value
+                    }
+                }
+
+                completion(data)
+            }
+
+            healthStore.execute(query)
+        }
+
+        // 執行步數和步行距離的查詢
+        createQuery(for: stepType) { stepData in
+            createQuery(for: distanceType) { distanceData in
+                for (date, steps) in stepData {
+                    let distance = distanceData[date] ?? 0
+                    print("時間: \(date), 步數: \(steps), 距離: \(distance) 公尺")
+                }
+            }
+        }
+    }
+
     // 更新資料的函數
     func refreshData() {
         fetchWeeklySteps()
+        fetchStepsAndDistance()
     }
 }
